@@ -1,5 +1,10 @@
 # Changes
 
+## 1.0.1
+
+- Fixed: diameters read from line ROIs were 10× too small (the viewer gives lengths in cm; they
+  were taken as mm), so volumes were 1000× too small. Typed diameters were not affected.
+
 ## 1.0.0 — first release
 
 - Port of the OsiriX/Horos Volume Calculator plugin to IsiX DICOM Viewer (GitHub build, macOS 15+),

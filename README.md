@@ -7,12 +7,12 @@ plugin.
 
 ## Download
 
-Current version: **1.0.0**.
+Current version: **1.0.1**.
 
 | Viewer | Package | macOS | Mac |
 |---|---|---|---|
-| IsiX DICOM Viewer 6.0+ (GitHub build) | `VolumeCalculator-IsiX-1.0.0.zip` | 15 or later | Apple silicon and Intel |
-| Horos 4.0.1 | `VolumeCalculator-Horos-1.0.0.zip` | 11 or later | Apple silicon and Intel |
+| IsiX DICOM Viewer 6.0+ (GitHub build) | `VolumeCalculator-IsiX-1.0.1.zip` | 15 or later | Apple silicon and Intel |
+| Horos 4.0.1 | `VolumeCalculator-Horos-1.0.1.zip` | 11 or later | Apple silicon and Intel |
 
 Each package works on both kinds of Mac. The App Store version of IsiX loads no plugins; use the
 [GitHub build of IsiX](https://github.com/ThalesMMS/IsiX-DICOM-Viewer-macOS/releases).

@@ -47,10 +47,12 @@ static NSString * const VCCloseViewer = @"CloseViewerNotification";
 - (void)readROI
 {
     if (self.roi == nil) return;
+    // -MesureLength: gives centimetres (pixels when the image has no pixel spacing), as in
+    // OsiriX and Horos; the window works in millimetres.
     float pixels = 0;
-    float mm = [self.roi MesureLength:&pixels];
-    self.inPixels = !(mm > 0);
-    self.diameter = self.inPixels ? pixels : mm;
+    float cm = [self.roi MesureLength:&pixels];
+    self.inPixels = !(cm > 0);
+    self.diameter = self.inPixels ? pixels : cm * 10.0;
 }
 @end
 
