@@ -1,0 +1,93 @@
+/*=========================================================================
+ This file is part of the Horos Project (www.horosproject.org)
+ 
+ Horos is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation,  version 3 of the License.
+ 
+ The Horos Project was based originally upon the OsiriX Project which at the time of
+ the code fork was licensed as a LGPL project.  However, not all of the the source-code
+ was properly documented and file headers were not all updated with the appropriate
+ license terms. The Horos Project, originally was licensed under the  GNU GPL license.
+ However, contributors to the software since that time have agreed to modify the license
+ to the GNU LGPL in order to be conform to the changes previously made to the
+ OsiriX Project.
+ 
+ Horos is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY EXPRESS OR IMPLIED, INCLUDING ANY WARRANTY OF
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE OR USE.  See the
+ GNU Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public License
+ along with Horos.  If not, see http://www.gnu.org/licenses/lgpl.html
+ 
+ Prior versions of this file were published by the OsiriX team pursuant to
+ the below notice and licensing protocol.
+ ============================================================================
+ Program:   OsiriX
+  Copyright (c) OsiriX Team
+  All rights reserved.
+  Distributed under GNU - LGPL
+  
+  See http://www.osirix-viewer.com/copyright.html for details.
+     This software is distributed WITHOUT ANY WARRANTY; without even
+     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+     PURPOSE.
+ ============================================================================*/
+
+// NSFileManager (N2) is implemented in Swift
+// (Nitrogen/Sources/NSFileManager+N2.swift). This header keeps
+// <Horos/NSFileManager+N2.h>: it brings in the generated interface, whose
+// Swift extension declares the same selectors, and declares the four methods
+// that stay in Objective-C (NSFileManager+N2+CAPI.m).
+
+#import <Cocoa/Cocoa.h>
+#import "N2DirectoryEnumerator.h"
+
+// FSRef and the File Manager calls these make are not visible to Swift.
+@interface NSFileManager (N2)
+
+-(NSString*)findSystemFolderOfType:(int)folderType forDomain:(int)domain __deprecated;
+-(NSUInteger)sizeAtPath:(NSString*)path __deprecated;
+-(NSUInteger)sizeAtFSRef:(FSRef*)theFileRef __deprecated;
+-(NSString*)destinationOfAliasAtPath:(NSString*)path __deprecated;
+
+@end
+
+#if defined(HOROS_BRIDGING_HEADER)
+// Swift is compiling the extension itself.
+#elif __has_include("Horos-Swift.h")
+#import "Horos-Swift.h"
+#else
+// A target without Swift, the Decompress helper: DCMPix.m and DicomFile.mm
+// name these selectors there, as they did before, without their
+// implementation. The category is not called (N2) here, so that only the
+// generated interface answers for the members the Swift implements.
+@interface NSFileManager (N2WithoutSwift)
+
+-(void) moveItemAtPathToTrash: (NSString*) path;
+// The system Trash of the item's volume; NO, with the item left in place, when it
+// cannot be trashed. resultingPath is where the system put it.
+-(BOOL) moveItemAtPathToTrash: (NSString*) path resultingPath: (NSString**) resultingPath error: (NSError**) error;
+-(NSString*)userApplicationSupportFolderForApp;
+-(NSString*)tmpFilePathInDir:(NSString*)dirPath;
+-(NSString*)tmpDirectoryPathInDir:(NSString*)dirPath;
+-(NSString*)tmpDirPath;
+-(NSString*)tmpFilePathInTmp;
+// Exclusively create a directory for callers that need a temporary database root.
+-(NSString*)tmpDirectoryPathInTmp;
+-(NSString*)confirmDirectoryAtPath:(NSString*)dirPath;
+-(NSString*)confirmNoIndexDirectoryAtPath:(NSString*)path;
+-(BOOL)copyItemAtPath:(NSString*)srcPath toPath:(NSString*)dstPath byReplacingExisting:(BOOL)replace error:(NSError**)err;
+
+-(BOOL)applyFileModeOfParentToItemAtPath:(NSString*)path;
+
+-(NSString*)destinationOfAliasOrSymlinkAtPath:(NSString*)path __deprecated;
+-(NSString*)destinationOfAliasOrSymlinkAtPath:(NSString*)path resolved:(BOOL*)r __deprecated;
+
+-(N2DirectoryEnumerator*)enumeratorAtPath:(NSString*)path limitTo:(NSInteger)maxNumberOfFiles;
+-(N2DirectoryEnumerator*)enumeratorAtPath:(NSString*)path filesOnly:(BOOL)filesOnly;
+-(N2DirectoryEnumerator*)enumeratorAtPath:(NSString*)path filesOnly:(BOOL)filesOnly recursive:(BOOL)recursive;
+
+@end
+#endif

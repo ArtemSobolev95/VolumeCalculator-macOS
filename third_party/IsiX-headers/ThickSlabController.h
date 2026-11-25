@@ -1,0 +1,70 @@
+/*=========================================================================
+ This file is part of the Horos Project (www.horosproject.org)
+ 
+ Horos is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation,  version 3 of the License.
+ 
+ The Horos Project was based originally upon the OsiriX Project which at the time of
+ the code fork was licensed as a LGPL project.  However, not all of the the source-code
+ was properly documented and file headers were not all updated with the appropriate
+ license terms. The Horos Project, originally was licensed under the  GNU GPL license.
+ However, contributors to the software since that time have agreed to modify the license
+ to the GNU LGPL in order to be conform to the changes previously made to the
+ OsiriX Project.
+ 
+ Horos is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY EXPRESS OR IMPLIED, INCLUDING ANY WARRANTY OF
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE OR USE.  See the
+ GNU Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public License
+ along with Horos.  If not, see http://www.gnu.org/licenses/lgpl.html
+ 
+ Prior versions of this file were published by the OsiriX team pursuant to
+ the below notice and licensing protocol.
+ ============================================================================
+ Program:   OsiriX
+  Copyright (c) OsiriX Team
+  All rights reserved.
+  Distributed under GNU - LGPL
+  
+  See http://www.osirix-viewer.com/copyright.html for details.
+     This software is distributed WITHOUT ANY WARRANTY; without even
+     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+     PURPOSE.
+ ============================================================================*/
+
+// ThickSlabController is implemented in Swift (Horos/Sources/ThickSlabController.swift).
+// This header keeps <Horos/ThickSlabController.h>: it brings in the generated interface,
+// which declares the same class name and selectors.
+
+#import <AppKit/AppKit.h>
+#import "OSIWindowController.h"
+
+@class ThickSlabVR;
+
+#if defined(HOROS_BRIDGING_HEADER)
+// Swift is compiling the class itself: headers it imports may only name it.
+@class ThickSlabController;
+#elif __has_include("Horos-Swift.h")
+#import "Horos-Swift.h"
+#else
+// A target without Swift, the Decompress helper: DCMPix.m names these
+// selectors there, as it did before, without their implementation.
+/** \brief Thick Slab window coontroller */
+@interface ThickSlabController : NSWindowController <NSWindowDelegate>
+-(id) init;
+-(void) setImageData:(long) w :(long) h :(long) c :(float) sX :(float) sY :(float) t :(BOOL) flip;
+-(unsigned char*) renderSlab;
+-(void) setWLWW: (float) l :(float) w;
+-(void) setBlendingWLWW: (float) l :(float) w;
+-(void) setImageSource: (float*) i :(long) c;
+-(void) setFlip: (BOOL) f;
+-(void) setCLUT: (unsigned char*) r : (unsigned char*) g : (unsigned char*) b;
+-(void) setBlendingCLUT:( unsigned char*) r : (unsigned char*) g : (unsigned char*) b;
+- (void) setLowQuality:(BOOL) q;
+-(void) setOpacity:(NSArray*) array;
+-(void) setImageBlendingSource: (float*) i;
+@end
+#endif

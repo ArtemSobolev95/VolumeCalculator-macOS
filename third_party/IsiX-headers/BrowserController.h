@@ -1,0 +1,637 @@
+/*=========================================================================
+ This file is part of the Horos Project (www.horosproject.org)
+ 
+ Horos is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation,  version 3 of the License.
+ 
+ The Horos Project was based originally upon the OsiriX Project which at the time of
+ the code fork was licensed as a LGPL project.  However, not all of the the source-code
+ was properly documented and file headers were not all updated with the appropriate
+ license terms. The Horos Project, originally was licensed under the  GNU GPL license.
+ However, contributors to the software since that time have agreed to modify the license
+ to the GNU LGPL in order to be conform to the changes previously made to the
+ OsiriX Project.
+ 
+ Horos is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY EXPRESS OR IMPLIED, INCLUDING ANY WARRANTY OF
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE OR USE.  See the
+ GNU Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public License
+ along with Horos.  If not, see http://www.gnu.org/licenses/lgpl.html
+ 
+ Prior versions of this file were published by the OsiriX team pursuant to
+ the below notice and licensing protocol.
+ ============================================================================
+ Program:   OsiriX
+  Copyright (c) OsiriX Team
+  All rights reserved.
+  Distributed under GNU - LGPL
+  
+  See http://www.osirix-viewer.com/copyright.html for details.
+     This software is distributed WITHOUT ANY WARRANTY; without even
+     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+     PURPOSE.
+ ============================================================================*/
+
+
+
+@class HorosFormView;
+
+#import <Cocoa/Cocoa.h>
+#include <Accelerate/Accelerate.h>
+
+@class DicomDatabase;
+
+@class MPR2DController,NSCFDate, DicomStudy;
+@class ViewerController, DicomImage;
+@class BonjourBrowser;
+@class AnonymizerWindowController,QueryController;
+@class LogWindowController,PreviewView;
+// Plugins may build against an SDK that predates this macro.
+#ifndef NS_SWIFT_NONISOLATED
+#define NS_SWIFT_NONISOLATED
+#endif
+
+#import "PreviewView.h"
+@class HorosPreviewWindowPolicy, HorosPreviewRedrawCoalescer;
+@class MyOutlineView,DCMView,DCMPix;
+@class StructuredReportController,BrowserMatrix,DicomSeries;
+@class PluginManagerController,WaitRendering, Wait, ActivityWindowController;
+@class WebPortalUser, DCMTKStudyQueryNode;
+
+enum RootTypes{PatientRootType, StudyRootType, RandomRootType};
+enum simpleSearchType {PatientNameSearch, PatientIDSearch};
+enum queueStatus{QueueHasData, QueueEmpty};
+enum dbObjectSelection {oAny,oMiddle,oFirstForFirst};
+
+extern NSString * const __deprecated O2AlbumDragType; // was used to mark dragging pasteboards destinated to the Sources list in the Database window, we now make the list accept O2PasteboardTypeDatabaseObjectXIDs instead
+extern NSString * const __deprecated O2DatabaseXIDsDragType; // the original UTI used for XID drags, use O2PasteboardTypeDatabaseObjectXIDs instead
+extern NSString * const O2PasteboardTypeDatabaseObjectXIDs;
+
+@interface NSString (BrowserController)
+-(NSMutableString*)filenameString;
+@end
+
+/** \brief Window controller for Browser
+ *
+ *   This is a large class with a lot of functions.
+ *   Along with managing the Browser Window it manages all the view in the browser
+ *	and manages the database
+ */
+
+@interface BrowserController : NSWindowController
+#if (MAC_OS_X_VERSION_MAX_ALLOWED > MAC_OS_X_VERSION_10_5)
+#ifdef HOROS_BRIDGING_HEADER
+// Swift is compiling the extensions that implement the table view, toolbar,
+// split view and preview delegate methods. They declare these
+// conformances themselves: Swift would otherwise take the protocols' methods
+// for declarations of the class and refuse the extensions' implementations.
+<NSMatrixDelegate, NSMenuDelegate, NSMenuItemValidation>
+#else
+<NSTableViewDelegate, NSMatrixDelegate, NSToolbarDelegate, NSMenuDelegate,NSSplitViewDelegate, PreviewViewWindowDelegate, NSMenuItemValidation>   //NSObject
+#endif
+#endif
+{
+    NSRect _databaseWindowedFrame;
+
+    DicomDatabase*					_database;
+    NSMutableDictionary				*databaseIndexDictionary;
+    
+    NSDateFormatter			*TimeFormat, *TimeWithSecondsFormat, *DateTimeWithSecondsFormat;
+    
+    NSString				*transferSyntax;
+    NSArray                 *dirArray;
+    NSToolbar               *toolbar;
+    
+    NSMutableArray			*sendQueue;
+    NSMutableDictionary		*reportFilesToCheck;
+    
+    NSMutableArray          *previewPix, *previewPixThumbnails;
+    /** Which window the preview is showing and why: a DICOM default, one
+        computed from the pixels, or an adjustment a person made. */
+    HorosPreviewWindowPolicy *previewWindowPolicy;
+    /** One preview decode per burst of scroll events, not one per notch. */
+    HorosPreviewRedrawCoalescer *previewRedrawCoalescer;
+    /** Bumped whenever previewPix is replaced, so a thumbnail batch published
+        by a thread that started before the selection changed is discarded. */
+    NSUInteger previewPixGeneration;
+    
+    NSMutableDictionary		*activeSends;
+    NSMutableArray			*sendLog;
+    NSMutableDictionary		*activeReceives;
+    NSMutableArray			*receiveLog;
+    
+    LogWindowController		*logWindowController;
+    
+    DCMPix                  *curPreviewPix;
+    
+    NSTimer                 *refreshTimer;
+    //    NSTimer                 *timer, *refreshTimer, *databaseCleanerTimer, *deleteQueueTimer;
+    long					loadPreviewIndex, previousNoOfFiles;
+    NSManagedObject			*previousItem;
+    
+    long					previousBonjourIndex;
+    
+    IBOutlet NSSplitView	*splitViewHorz, *splitViewVert, *splitAlbums, *splitDrawer, *splitComparative;
+    CGFloat _splitViewVertDividerRatio;
+    
+    BOOL					setDCMDone, dontUpdatePreviewPane;
+    
+    NSTimeInterval          lastComputeAlbumsForDistantStudies;
+    NSMutableDictionary     *_distantAlbumNoOfStudiesCache;
+    NSThread                *distantSearchThread;
+    NSMutableArray*         _albumNoOfStudiesCache;
+    NSArray*                _cachedAlbums, *_cachedAlbumsIDs;
+    NSManagedObjectContext* _cachedAlbumsContext;
+    NSString                *selectedAlbumName;
+    
+    NSArray							*outlineViewArray, *originalOutlineViewArray;
+    NSSet                           *originalOutlineViewStudies; // originalOutlineViewArray, for membership while drawing
+    NSArray							*matrixViewArray;
+    
+    NSString						*_searchString;
+    
+    IBOutlet NSTextField			*databaseDescription;
+    IBOutlet MyOutlineView          *databaseOutline;
+    NSMenu							*columnsMenu;
+    IBOutlet BrowserMatrix			*oMatrix;
+    IBOutlet NSTableView			*albumTable;
+    
+    IBOutlet NSBox					*bonjourSourcesBox;
+    
+    IBOutlet NSArrayController*		_sourcesArrayController;
+    IBOutlet NSTableView*			_sourcesTableView;
+    id								_sourcesHelper;
+    BonjourBrowser					*bonjourBrowser;
+    
+    IBOutlet NSSlider				*animationSlider;
+    IBOutlet NSButton				*animationCheck;
+    IBOutlet NSSplitView*           _bottomSplit;
+    
+    IBOutlet PreviewView			*imageView;
+    IBOutlet NSView                 *matrixView;
+    IBOutlet NSView                 *comparativeScrollView;
+    
+    int								subFrom, subTo, subInterval, subMax;
+    
+    IBOutlet NSWindow				*subOpenWindow;
+    IBOutlet NSMatrix				*subOpenMatrix3D, *subOpenMatrix4D, *supOpenButtons;
+    
+    IBOutlet NSWindow				*subSeriesWindow;
+    IBOutlet NSButton				*subSeriesOKButton;
+    IBOutlet NSTextField			*memoryMessage;
+    IBOutlet NSImageView			*leftIcon, *rightIcon;
+    IBOutlet NSBox					*warningBox;
+    
+    IBOutlet NSWindow				*bonjourPasswordWindow;
+    IBOutlet NSTextField			*password;
+    
+    IBOutlet NSWindow				*newAlbum;
+    IBOutlet NSTextField			*newAlbumName;
+    
+    IBOutlet NSWindow				*rebuildWindow;
+    IBOutlet NSMatrix				*rebuildType;
+    IBOutlet NSTextField			*estimatedTime, *noOfFilesToRebuild, *warning;
+    
+    int								timeIntervalType;
+    NSDate							*timeIntervalStart, *timeIntervalEnd;
+    IBOutlet NSView					*timeIntervalView;
+    
+    NSString						*modalityFilter;
+    IBOutlet NSPopUpButton          *modalityFilterMenu;
+    IBOutlet NSView					*modalityFilterView;
+    
+    IBOutlet NSView					*searchView;
+    IBOutlet NSSearchField			*searchField;
+    IBOutlet NSButton               *searchInEntireDBResult;
+    NSToolbarItem					*toolbarSearchItem;
+    int								searchType;
+    
+    IBOutlet NSMenu					*imageTileMenu;
+    IBOutlet NSWindow				*urlWindow, *CDpasswordWindow, *ZIPpasswordWindow;
+    IBOutlet NSTextField			*urlString;
+    
+    IBOutlet HorosFormView					*rdPatientForm, *rdPixelForm, *rdVoxelForm, *rdOffsetForm;
+    IBOutlet NSMatrix				*rdPixelTypeMatrix;
+    IBOutlet NSView					*rdAccessory;
+    
+    IBOutlet NSView					*exportQuicktimeView;
+    IBOutlet NSButton				*exportHTMLButton;
+    
+    IBOutlet NSView					*exportAccessoryView;
+    IBOutlet NSMatrix				*compressionMatrix, *folderTree;
+    
+    NSPredicate						*testPredicate;
+    
+    BOOL							showAllImages, DatabaseIsEdited, isNetworkLogsActive;
+    BOOL                            _refreshDeferredWhileEditing;
+    NSConditionLock					*queueLock;
+    
+    IBOutlet NSScrollView			*thumbnailsScrollView;
+    
+    NSPredicate						*_fetchPredicate, *_filterPredicate;
+    NSString						*_filterPredicateDescription;
+    
+    NSString						*CDpassword, *pathToEncryptedFile, *passwordForExportEncryption;
+    
+    NSUInteger						previousFlags;
+    
+    NSMutableArray					*deleteQueueArray;
+    NSRecursiveLock					*deleteQueue, *deleteInProgress;
+    
+    NSConditionLock					*processorsLock;
+    
+    NSMutableString					*pressedKeys;
+    
+    IBOutlet NSView					*reportTemplatesView;
+    IBOutlet NSImageView			*reportTemplatesImageView;
+    IBOutlet NSPopUpButton			*reportTemplatesListPopUpButton;
+    NSInteger						reportToolbarItemType;
+    
+    IBOutlet NSWindow				*addStudiesToUserWindow;
+    IBOutlet NSWindow				*notificationEmailWindow;
+    IBOutlet NSArrayController		*notificationEmailArrayController;
+    NSString						*temporaryNotificationEmail, *customTextNotificationEmail;
+    
+    NSImage							*notFoundImage;
+    
+    BOOL							ROIsAndKeyImagesButtonAvailable;
+    
+    BOOL							rtstructProgressBar;
+    float							rtstructProgressPercent;
+    
+    BOOL							avoidRecursive, openSubSeriesFlag, openReparsedSeriesFlag;
+    
+    IBOutlet PluginManagerController *pluginManagerController;
+    
+    WaitRendering					*waitOpeningWindow;
+    BOOL							waitCompressionAbort;
+    
+    NSMutableArray					*cachedFilesForDatabaseOutlineSelectionSelectedFiles;
+    NSMutableArray					*cachedFilesForDatabaseOutlineSelectionCorrespondingObjects;
+    NSMutableSet                    *cachedFilesForDatabaseOutlineSelectionTreeObjects;
+    NSIndexSet						*cachedFilesForDatabaseOutlineSelectionIndex;
+    
+    id                              lastROIsAndKeyImagesSelectedFiles, lastROIsImagesSelectedFiles, lastKeyImagesSelectedFiles;
+    NSArray                         *ROIsAndKeyImagesCache, *ROIsImagesCache, *KeyImagesCache;
+    BOOL                            ROIsAndKeyImagesCacheSameSeries, ROIsImagesCacheSameSeries;
+    
+    BOOL                            _computingNumberOfStudiesForAlbums;
+    
+    IBOutlet NSTableView* _activityTableView;
+    id _activityHelper;
+    
+    IBOutlet NSSplitView *bannerSplit;
+    IBOutlet NSButton *banner;
+    
+    NSTimeInterval _timeIntervalOfLastLoadIconsDisplayIcons;
+    NSThread *matrixLoadIconsThread;
+    
+    BOOL subSeriesWindowIsOn;
+    
+    NSRecursiveLock *searchForComparativeStudiesLock;
+    NSString *comparativePatientUID; //Current patient history displayed
+    NSMutableArray *comparativeStudySearchArray; //The queue of patient history to be searched
+    NSArray *comparativeStudies; //Studies for the NSTableView
+    IBOutlet NSTableView *comparativeTable;
+    BOOL dontSelectStudyFromComparativeStudies;
+    NSTimeInterval lastRefreshComparativeStudies; //Refresh the studies after X minutes
+    
+    NSMutableArray *comparativeRetrieveQueue; //Retrieve Queue: don't retrieve the same study multiple times
+    DCMTKStudyQueryNode *comparativeStudyWaited; //The study to be selected or opened
+    ViewerController *comparativeStudyWaitedViewer; //The destination viewer
+    NSTimeInterval comparativeStudyWaitedTime; //The time when the study to be selected or opened was activated
+    BOOL comparativeStudyWaitedToOpen; // for retrieveStudy: function
+    BOOL comparativeStudyWaitedToSelect; // for retrieveStudy: function
+    
+    NSString *smartAlbumDistantName;
+    NSArray *smartAlbumDistantArray;
+    NSMutableArray *smartAlbumDistantSearchArray; //The queue of smart albums to be searched
+    NSTimeInterval lastRefreshSmartAlbumDistantStudies;
+    NSString *distantStudyMessage; // The text displayed in the matrix thumbnails
+    
+    NSDate *distantTimeIntervalStart, *distantTimeIntervalEnd;
+    NSString *distantSearchString;
+    int distantSearchType;
+    int distantEntireDBResultCount, localEntireDBResultCount;
+    
+    BOOL autoretrievingPACSOnDemandSmartAlbum;
+}
+
+// Read from any thread, as it always was; set on the main thread.
+@property(retain,nonatomic) DicomDatabase* database NS_SWIFT_NONISOLATED;
+/// Why the last study asked for did not open, for the caller that is waiting
+/// on it to say so. Cleared as soon as one is selected.
+@property(copy) NSString *lastStudyNotOpenedReason;
+@property(readonly) NSArrayController* sources;
+
+@property(readonly) NSDateFormatter *DateTimeFormat __deprecated, *DateOfBirthFormat __deprecated, *TimeFormat, *TimeWithSecondsFormat, *DateTimeWithSecondsFormat;
+@property(readonly) NSArray *matrixViewArray;
+@property(readonly) NSMatrix *oMatrix;
+@property(readonly) BOOL is2DViewer;
+@property(readonly) MyOutlineView *databaseOutline;
+@property(readonly) NSTableView *albumTable;
+@property(readonly) NSString *localDatabasePath __deprecated;
+
+@property(readonly) NSBox *bonjourSourcesBox;
+@property(readonly) BonjourBrowser *bonjourBrowser;
+
+@property(retain) NSString *CDpassword, *pathToEncryptedFile, *passwordForExportEncryption, *temporaryNotificationEmail, *customTextNotificationEmail, *comparativePatientUID, *smartAlbumDistantName, *distantStudyMessage, *distantSearchString, *selectedAlbumName;
+@property(retain) NSPredicate *fetchPredicate, *testPredicate;
+@property(retain) NSArray *comparativeStudies;
+@property(readonly) NSPredicate *filterPredicate;
+@property(readonly) NSString *filterPredicateDescription;
+@property(retain) NSDate *distantTimeIntervalStart, *distantTimeIntervalEnd;
+
+@property(nonatomic, retain) NSString *modalityFilter;
+@property(nonatomic) int timeIntervalType;
+@property (nonatomic) NSTimeInterval databaseLastModification __deprecated;
+@property(readonly) NSMutableDictionary *databaseIndexDictionary;
+@property(readonly) PluginManagerController *pluginManagerController;
+@property int distantSearchType;
+
++(void)initializeBrowserControllerClass;
++ (unsigned int)_currentModifierFlags;
++ (int) compressionForModality: (NSString*) mod quality:(int*) quality resolution: (int) resolution;
+// Any thread: the browser is made once, at launch.
++ (BrowserController*) currentBrowser NS_SWIFT_NONISOLATED;
+// String work only: any thread.
++ (NSMutableString*) replaceNotAdmitted: (NSString*)name NS_SWIFT_NONISOLATED;
++ (NSMutableString*) replaceNotAdmitted:(NSString*)name preserveHyphens:(BOOL)preserveHyphens NS_SWIFT_NONISOLATED;
++ (NSArray*) statesArray NS_SWIFT_NONISOLATED;
++ (void) updateActivity;
++ (BOOL) horizontalHistory;
++ (BOOL) isHardDiskFull __deprecated;
++ (int) DefaultFolderSizeForDB NS_SWIFT_NONISOLATED;
++ (long) computeDATABASEINDEXforDatabase:(NSString*) path __deprecated;
+// Any thread; the progress window only when called on the main thread.
++ (void) encryptFileOrFolder: (NSString*) srcFolder inZIPFile: (NSString*) destFile password: (NSString*) password NS_SWIFT_NONISOLATED;
++ (void) encryptFileOrFolder: (NSString*) srcFolder inZIPFile: (NSString*) destFile password: (NSString*) password deleteSource: (BOOL) deleteSource NS_SWIFT_NONISOLATED;
++ (void) encryptFileOrFolder: (NSString*) srcFolder inZIPFile: (NSString*) destFile password: (NSString*) password deleteSource: (BOOL) deleteSource showGUI: (BOOL) showGUI NS_SWIFT_NONISOLATED;
++ (BOOL) prepareProtectedEmailAttachment:(NSString*)source destination:(NSString*)destination password:(NSString*)password error:(NSError**)error;
++ (BOOL) encryptFileOrFolder:(NSString*)srcFolder inZIPFile:(NSString*)destFile password:(NSString*)password deleteSource:(BOOL)deleteSource showGUI:(BOOL)showGUI error:(NSError**)error NS_SWIFT_NONISOLATED;
++ (BOOL) encryptFilesOrFolders:(NSArray*)srcItems inZIPFile:(NSString*)destFile password:(NSString*)password deleteSource:(BOOL)deleteSource showGUI:(BOOL)showGUI error:(NSError**)error NS_SWIFT_NONISOLATED;
+// Runs zip on the calling thread: the web portal and the export threads call it.
++ (void) encryptFiles: (NSArray*) srcFiles inZIPFile: (NSString*) destFile password: (NSString*) password NS_SWIFT_NONISOLATED;
+- (IBAction) createDatabaseFolder:(id) sender;
+- (IBAction) addAlbum:(id)sender;
+
+- (IBAction) deleteAlbum: (id)sender;
+- (IBAction) defaultAlbums: (id) sender;
+- (IBAction) clickBanner:(id) sender;
+- (IBAction) refreshPACSOnDemandResults:(id)sender;
+- (void) openDatabasePath: (NSString*) path;
+- (NSArray*) albums;
+- (NSManagedObjectID*) currentAlbumID: (DicomDatabase*) d;
+- (DicomStudy*) selectedStudy;
+- (BOOL) shouldTerminate: (id) sender;
+- (void) setDBDate;
+- (void) emptyDeleteQueueNow: (id) sender;
+- (void) saveDeleteQueue;
+- (void) showEntireDatabase;
+- (void) subSelectFilesAndFoldersToAdd: (NSArray*) filenames;
+- (NSPredicate*) smartAlbumPredicate:(NSManagedObject*) album;
+- (NSPredicate*) smartAlbumPredicateString:(NSString*) string;
+- (void) emptyDeleteQueueThread;
+- (void) emptyDeleteQueue:(id) sender;
+// Under the delete queue's lock: any thread.
+- (void) addFileToDeleteQueue:(NSString*) file NS_SWIFT_NONISOLATED;
+- (NSString*) getNewFileDatabasePath: (NSString*) extension __deprecated;
+- (NSString*) getNewFileDatabasePath: (NSString*) extension dbFolder: (NSString*) dbFolder __deprecated;
+- (NSManagedObjectModel *) managedObjectModel __deprecated;
+
+
+- (NSManagedObjectContext *) localManagedObjectContext __deprecated;
+- (NSManagedObjectContext *) localManagedObjectContextIndependentContext: (BOOL) independentContext __deprecated;
+
+- (NSManagedObjectContext *) managedObjectContext __deprecated;
+- (NSManagedObjectContext *) managedObjectContextIndependentContext:(BOOL) independentContext __deprecated;
+- (NSManagedObjectContext *) managedObjectContextIndependentContext:(BOOL) independentContext path: (NSString *) path __deprecated;
+
+- (NSManagedObjectContext *) defaultManagerObjectContext __deprecated;
+- (NSManagedObjectContext *) defaultManagerObjectContextIndependentContext: (BOOL) independentContext __deprecated;
+
+- (BOOL) isBonjour: (NSManagedObjectContext*) c __deprecated;
+- (void) alternateButtonPressed: (NSNotification*)n;
+// Model objects only, on the thread of their context.
+- (NSArray*) childrenArray: (id) item NS_SWIFT_NONISOLATED;
+- (NSArray*) childrenArray: (id) item onlyImages:(BOOL) onlyImages NS_SWIFT_NONISOLATED;
+- (NSArray*) imagesArray: (id) item;
+- (NSArray*) imagesArray: (id) item preferredObject: (int) preferredObject;
+- (NSArray*) imagesArray: (id) item onlyImages:(BOOL) onlyImages;
+- (NSArray*) imagesArray: (id) item preferredObject: (int) preferredObject onlyImages:(BOOL) onlyImages;
+- (void) computeTimeInterval;
+- (void) ReadDicomCDRom:(id) sender __deprecated;
+- (void) addURLToDatabaseEnd:(id) sender;
+- (void) addURLToDatabase:(id) sender;
+- (NSThread*)importURLs:(NSArray*)URLs completion:(void (^)(NSArray*, NSString*, BOOL))completion;
+- (NSArray*) addURLToDatabaseFiles:(NSArray*) URLs;
+- (NSArray*) addURLToDatabaseFiles:(NSArray*) URLs report: (NSString**) report;
+- (void) selectServer: (NSArray*) files;
+- (long) saveDatabase __deprecated;
+- (long) saveDatabase:(NSString*) path __deprecated;
+- (long) saveDatabase: (NSString*)path context: (NSManagedObjectContext*) context __deprecated;
+- (void) addDICOMDIR:(NSString*) dicomdir :(NSMutableArray*) files;
+- (void) copyFilesIntoDatabaseIfNeeded: (NSMutableArray*)filesInput options: (NSDictionary*) options;
+- (ViewerController*) openViewerFromImages:(NSArray*) toOpenArray movie:(BOOL) movieViewer viewer:(ViewerController*) viewer keyImagesOnly:(BOOL) keyImages;
+- (ViewerController*) openViewerFromImages:(NSArray*) toOpenArray movie:(BOOL) movieViewer viewer:(ViewerController*) viewer keyImagesOnly:(BOOL) keyImages tryToFlipData:(BOOL) tryToFlipData;
+- (void) export2PACS:(id) sender;
++ (void)setPath:(NSString*)path relativeTo:(NSString*)dirPath forSeriesId:(int)seriesId kind:(NSString*)kind toSeriesPaths:(NSMutableDictionary*)seriesPaths; // used by +exportQuicktime
++ (void) exportQuicktime:(NSArray*)dicomFiles2Export :(NSString*)path :(BOOL)html :(BrowserController*)browser :(NSMutableDictionary*)seriesPaths NS_SWIFT_NONISOLATED;
+- (void) exportQuicktimeInt:(NSArray*) dicomFiles2Export :(NSString*) path :(BOOL) html;
++ (void) multiThreadedImageConvert: (NSString*) what :(vImage_Buffer*) src :(vImage_Buffer *) dst :(float) offset :(float) scale;
+- (IBAction) delItem:(id) sender;
+- (void) proceedDeleteObjects: (NSArray*) objectsToDelete;
+- (void) delObjects:(NSMutableArray*) objectsToDelete;
+- (IBAction) selectFilesAndFoldersToAdd:(id) sender;
+- (IBAction) showDatabase:(id)sender;
+- (IBAction)fullScreenMenu:(id)sender;
+- (void) loadDatabase:(NSString*) path __deprecated;
+- (void) viewerDICOMInt:(BOOL) movieViewer dcmFile:(NSArray *)selectedLines viewer:(ViewerController*) viewer;
+- (void) viewerDICOMInt:(BOOL) movieViewer dcmFile:(NSArray *)selectedLines viewer:(ViewerController*) viewer tileWindows: (BOOL) tileWindows;
+- (NSArray*) exportDICOMFileInt:(NSString*) location files:(NSMutableArray*) filesToExport objects:(NSMutableArray*) dicomFiles2Export;
+- (NSArray*) exportDICOMFileInt: (NSDictionary*) parameters;
+- (void) processOpenViewerDICOMFromArray:(NSArray*) toOpenArray movie:(BOOL) movieViewer viewer: (ViewerController*) viewer;
+- (void) setDatabaseValue:(id) object item:(id) item forKey:(NSString*) key;
+- (float) fontSize: (NSString*) type;
+- (void) setTableViewRowHeight;
+- (NSString*) getDatabaseFolderFor: (NSString*) path __deprecated;
+- (NSString*) getDatabaseIndexFileFor: (NSString*) path __deprecated;
+- (IBAction) copyToDBFolder: (id) sender;
+- (IBAction)customize:(id)sender;
+- (IBAction)showhide:(id)sender;
+- (IBAction) selectAll3DSeries:(id) sender;
+- (IBAction) selectAll4DSeries:(id) sender;
+- (IBAction) switchSoundex: (id)sender;
+- (void) exportDICOMFile:(id) sender;
+- (void) viewerDICOM:(id) sender;
+- (void)newViewerDICOM:(id) sender;
+- (void) viewerDICOMKeyImages:(id) sender;
+- (void) viewerDICOMMergeSelection:(id) sender;
+- (IBAction)addSmartAlbum: (id)sender;
+- (IBAction)search: (id)sender;
+- (IBAction)setSearchType: (id)sender;
+- (IBAction) openDatabase:(id) sender;
+- (void) openDatabaseIn:(NSString*) a Bonjour:(BOOL) isBonjour __deprecated;
+- (void) openDatabaseIn: (NSString*)a Bonjour: (BOOL)isBonjour refresh: (BOOL) refresh __deprecated;
+- (void) browserPrepareForClose;
+- (IBAction) endReBuildDatabase:(id) sender;
+- (IBAction) ReBuildDatabaseSheet: (id)sender;
+- (void) addHelpMenu;
++ (NSString*) _findFirstDicomdirOnCDMedia: (NSString*)startDirectory __deprecated;
++ (BOOL)isItCD:(NSString*) path;
+- (void)storeSCPComplete:(id)sender;
+- (NSMutableArray *) filesForDatabaseOutlineSelection :(NSMutableArray*) correspondingDicomFile;
+- (NSMutableArray *) filesForDatabaseOutlineSelection :(NSMutableArray*) correspondingManagedObjects onlyImages:(BOOL) onlyImages;
+- (void) addFiles: (NSArray*) files withRule:(NSDictionary*) routingRule __deprecated;
+- (void) resetListenerTimer __deprecated;
+- (IBAction) albumTableDoublePressed: (id)sender;
+- (IBAction) regenerateAutoComments:(id) sender;
+- (DCMPix *)previewPix:(int)i;
+- (NSArray*) addFilesToDatabase:(NSArray*) newFilesArray __deprecated;
+- (void) addFilesAndFolderToDatabase:(NSArray*) filenames; // asks what to do with files
+- (NSArray*) addFilesToDatabase:(NSArray*) newFilesArray onlyDICOM:(BOOL) onlyDICOM  produceAddedFiles:(BOOL) produceAddedFiles __deprecated;
+- (NSArray*) addFilesToDatabase:(NSArray*) newFilesArray onlyDICOM:(BOOL) onlyDICOM  produceAddedFiles:(BOOL) produceAddedFiles parseExistingObject:(BOOL) parseExistingObject __deprecated;
+- (NSArray*) addFilesToDatabase:(NSArray*) newFilesArray onlyDICOM:(BOOL) onlyDICOM  produceAddedFiles:(BOOL) produceAddedFiles parseExistingObject:(BOOL) parseExistingObject context: (NSManagedObjectContext*) context dbFolder:(NSString*) dbFolder __deprecated;
+- (NSArray*) addFilesToDatabase:(NSArray*) newFilesArray onlyDICOM:(BOOL) onlyDICOM  safeRebuild:(BOOL) safeRebuild produceAddedFiles:(BOOL) produceAddedFiles __deprecated;
++(NSArray*)addFiles:(NSArray*)newFilesArray toContext:(NSManagedObjectContext*)context onlyDICOM:(BOOL)onlyDICOM  notifyAddedFiles:(BOOL)notifyAddedFiles parseExistingObject:(BOOL)parseExistingObject dbFolder:(NSString*)dbFolder __deprecated;
++(NSArray*)addFiles:(NSArray*)newFilesArray toContext:(NSManagedObjectContext*)context toDatabase:(BrowserController*)browserController onlyDICOM:(BOOL)onlyDICOM  notifyAddedFiles:(BOOL)notifyAddedFiles parseExistingObject:(BOOL)parseExistingObject dbFolder:(NSString*)dbFolder __deprecated;
++(NSArray*)addFiles:(NSArray*)newFilesArray toContext:(NSManagedObjectContext*)context toDatabase:(BrowserController*)browserController onlyDICOM:(BOOL)onlyDICOM  notifyAddedFiles:(BOOL)notifyAddedFiles parseExistingObject:(BOOL)parseExistingObject dbFolder:(NSString*)dbFolder generatedByOsiriX:(BOOL)generatedByOsiriX __deprecated;
++(NSArray*) addFiles:(NSArray*) newFilesArray toContext: (NSManagedObjectContext*) context toDatabase: (BrowserController*) browserController onlyDICOM: (BOOL) onlyDICOM  notifyAddedFiles: (BOOL) notifyAddedFiles parseExistingObject: (BOOL) parseExistingObject dbFolder: (NSString*) dbFolder generatedByOsiriX: (BOOL) generatedByOsiriX mountedVolume: (BOOL) mountedVolume __deprecated;
++ (BOOL) unzipFile: (NSString*) file withPassword: (NSString*) pass destination: (NSString*) destination;
++ (BOOL) unzipFile: (NSString*) file withPassword: (NSString*) pass destination: (NSString*) destination showGUI: (BOOL) showGUI;
+- (int) askForZIPPassword: (NSString*) file destination: (NSString*) destination;
+- (IBAction) reparseIn3D:(id) sender;
+- (IBAction) reparseIn4D:(id) sender;
+- (void)selectStudyWithObjectID:(NSManagedObjectID*)oid;
+- (BOOL) selectThisStudy: (id)study;
+
+- (void) selectDatabaseOutline;
+
+
+- (void) refreshColumns;
+- (NSString*) outlineViewRefresh;
+- (NSArray*) albumArray;
+- (void) refreshAlbums;
+- (void) waitForRunningProcesses;
+
+- (NSArray*) imagesPathArray: (NSManagedObject*) item;
+
+- (void) autoCleanDatabaseFreeSpace:(id) sender __deprecated;
+- (void) autoCleanDatabaseDate:(id) sender __deprecated;
+
+- (void) refreshDatabase:(id) sender;
+
+//bonjour
+- (void) setBonjourDatabaseValue:(NSManagedObject*) obj value:(id) value forKey:(NSString*) key __deprecated;
+- (NSString*) getLocalDCMPath: (NSManagedObject*) obj :(long) no;
+- (void) displayBonjourServices;
+- (NSString*) askPassword;
+- (void) resetToLocalDatabase;
+- (void) completeFirstUseDatabaseSetup;
+- (void) switchToDefaultDBIfNeeded __deprecated;
+- (void) checkIncomingThread:(id) sender __deprecated;
+- (void) checkIncoming:(id) sender __deprecated;
+- (void) checkIncomingNow:(id) sender __deprecated;
+- (NSArray*) openSubSeries: (NSArray*) toOpenArray;
+- (IBAction) checkMemory:(id) sender;
+
+// Finding Comparisons
+
+//DB plugins
+
+
+- (NSString *)folderPathResolvingAliasAndSymLink:(NSString *)path __deprecated;
+
+- (void) willChangeContext;
+
+
++ (void)installAutomaticCleanupPreviewMenu;
++ (void)installSurgicalProcedureImportMenu;
+- (IBAction)importSurgicalProcedureLog:(id)sender;
+- (NSArray *)surgicalProcedureTimelineEvents;
+- (IBAction)showSurgicalProcedureTimeline:(id)sender;
+- (IBAction)previewAutomaticCleanup:(id)sender;
+
+- (IBAction)selectNoAlbums:(id)sender;
+- (void) selectAlbumWithName: (NSString*) name;
+
++ (void) asyncWADOXMLDownloadURL:(NSURL*) url;
+
+- (void) refreshMatrix:(id) sender;
+
+#ifndef OSIRIX_LIGHT
+- (void) decompressDICOMJPEG: (NSArray*) array __deprecated;
+- (void) compressDICOMJPEG:(NSArray*) array __deprecated;
+- (void) decompressArrayOfFiles: (NSArray*) array work:(NSNumber*) work __deprecated;
+- (IBAction) compressSelectedFiles:(id) sender;
+- (IBAction) decompressSelectedFiles:(id) sender;
+- (void) importReport:(NSString*) path UID: (NSString*) uid;
+- (BOOL) importReport:(NSString*) path UID:(NSString*) uid error:(NSError**) error;
+- (IBAction)attachExistingReport:(id)sender;
+- (IBAction)insertSelectedImagesIntoReport:(id)sender;
+- (IBAction)importRawData:(id)sender;
+- (IBAction) burnDICOM:(id) sender;
+- (IBAction) anonymizeDICOM:(id) sender;
+- (IBAction) queryDICOM:(id) sender;
+- (IBAction) querySelectedStudy:(id) sender;
+- (void) refreshComparativeStudies: (NSArray*) newStudies;
+// Reads the defaults and the node list: the web portal asks from its threads.
++ (NSArray*) comparativeServers NS_SWIFT_NONISOLATED;
+- (IBAction) viewXML:(id) sender;
+#endif
+
+- (void) refreshComparativeStudiesIfNeeded:(id) timer;
+- (NSArray*) distantStudiesForSmartAlbum: (NSString*) albumName;
+- (void) initAnimationSlider;
+
+
+
++ (NSString*) DateTimeWithSecondsFormat:(NSDate*) t NS_SWIFT_NONISOLATED;
++ (NSString*) TimeWithSecondsFormat:(NSDate*) t;
++ (NSString*) DateOfBirthFormat:(NSDate*) d __deprecated;
++ (NSString*) DateTimeFormat:(NSDate*) d __deprecated;
++ (NSString*) TimeFormat:(NSDate*) t;
+
+
+
+- (void)writeMovie:(NSArray*)imagesArray name:(NSString*)fileName;
+
+/******Notifactions posted by browserController***********
+ OsirixNewStudySelectedNotification with userinfo key @"Selected Study" posted when a newStudy is selected in the browser
+ @"Close All Viewers" posted when close open windows if option key pressed.
+ @"DCMImageTilingHasChanged" when image tiling has changed
+ OsirixAddToDBNotification posted when files are added to the DB
+ */
+
+
+/** Every database object XID on a pasteboard, across all its items. */
+/** A Structured Report or encapsulated PDF a person would export as a report; never the application's own SRs. */
+/** File promises for database rows and thumbnails: DICOM by default, JPEG/PDF on request. */
+
+#pragma mark Deprecated
+
+@property(readonly) NSManagedObjectContext *userManagedObjectContext __deprecated;
+@property(readonly) NSManagedObjectModel *userManagedObjectModel __deprecated;
+
+-(long)saveUserDatabase __deprecated;
+-(WebPortalUser*)userWithName:(NSString*)name __deprecated;
+
+
+
+@end
+
+#import "BrowserController+Sources.h"
+#import "BrowserController+DatabaseDragExport.h"
+#import "BrowserController+Preview.h"
+#import "BrowserController+SplitView.h"
+#import "BrowserController+AlbumsTableView.h"
+#import "BrowserController+Reports.h"
+#import "BrowserController+Toolbar.h"
+#import "BrowserController+Plugins.h"
+
+@interface BrowserController (HorosPatientListAlbumActions)
+- (IBAction) createAlbumFromPatientListImage:(id)sender;
+@end

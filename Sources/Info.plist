@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>VolumeCalculator</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.artemsobolev.VolumeCalculator</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>VolumeCalculator</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
+	<key>MenuTitles</key>
+	<array>
+		<string>Volume Calculator</string>
+	</array>
+	<key>NSPrincipalClass</key>
+	<string>VolumeCalculatorFilter</string>
+	<key>pluginType</key>
+	<string>roiTool</string>
+	<key>ToolbarIcon</key>
+	<string>VolumeCalculator-icon.png</string>
+	<key>ToolbarToolTips</key>
+	<dict>
+		<key>Volume Calculator</key>
+		<string>Volume of a sphere from a diameter, and its change between two studies</string>
+	</dict>
+	<key>allowToolbarIcon</key>
+	<string>YES</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Volume Calculator — volume of a sphere from a diameter and its change between studies. Port of the OsiriX/Horos Volume Calculator plugin.</string>
+</dict>
+</plist>
